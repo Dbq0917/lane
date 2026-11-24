@@ -23,6 +23,8 @@ The Lane package provides textbook implementations of generic `Queue`, `Priority
       - [Queue example](#queue-example)
     - [Stack](#stack)
       - [Stack example](#stack-example)
+    - [Block pool](#block-pool)
+      - [Block pool example](#block-pool-example)
   - [Performance](#performance)
   - [Documentation](#documentation)
   - [License](#license)
@@ -212,6 +214,41 @@ if ok {
 value, ok = stack.Pop()
 if ok {
     fmt.Println(value) // redPlate
+}
+```
+
+### Block pool
+
+`BlockPool` stores fixed-size blocks in a single file. Every block starts with a header containing its owner queue, logical offset, generation, payload length, and checksums.
+
+`Allocate` only claims a block in memory. The new ownership header is written by the first `Write` together with the payload, in one `WriteAt` call. This means a recycled block cannot expose the previous queue's header, while allocation does not add a separate disk write. `Release` writes a small free header; the old payload is left in place and is unreachable until the block is written again.
+
+#### Block pool example
+
+```go
+pool, err := OpenBlockPool("blocks.db", BlockPoolOptions{
+    BlockSize: 4096,
+    GrowBy:    256,
+})
+if err != nil {
+    panic(err)
+}
+defer pool.Close()
+
+block, err := pool.WriteBlock(QueueID(1), 0, []byte("payload"))
+if err != nil {
+    panic(err)
+}
+
+payload, err := pool.Read(block)
+if err != nil {
+    panic(err)
+}
+
+fmt.Println(string(payload)) // payload
+
+if err := pool.Release(block); err != nil {
+    panic(err)
 }
 ```
 
