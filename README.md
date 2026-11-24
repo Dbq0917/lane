@@ -172,6 +172,38 @@ for {
 }
 ```
 
+### Bounded queue
+
+`BoundedQueue` (also exposed as `BoundQueue`, `BlockingQueue` and
+`NewQueueWithCapacity`) is a capacity-aware `Queue`: the capacity check and
+the insertion happen in one atomic critical section, so concurrent
+producers can never overshoot the limit. When the queue is full, `Enqueue`
+blocks and applies backpressure; a consumer calling `Dequeue`/`Take` wakes
+one waiting producer. `Close` wakes every blocked producer and consumer:
+blocked `Enqueue` calls return `false`, while queued items remain drainable.
+
+The historical `NewQueue` constructor stays unbounded and unchanged.
+
+```go
+// At most 100000 items; the capacity accepts any int/uint kind.
+queue := NewBoundedQueue[int](100000)
+
+go func() {
+    for _, item := range items {
+        // Blocks while the queue is full; returns false once closed.
+        if !queue.Enqueue(item) {
+            return
+        }
+    }
+}()
+
+// Consumers remove items as usual; Take blocks when empty.
+item, ok := queue.Take()
+
+// Release all blocked producers/consumers on shutdown.
+queue.Close()
+```
+
 ### Stack
 
 `Stack` implements a **Last In First Out** data structure. Built upon a `Deque` container, its API focuses on the following core functionalities: `Push`, `Pop`, `Head`. Every operation on a Stack has a time complexity of *O(1)*. Every operation on a `Stack` is goroutine-safe.
